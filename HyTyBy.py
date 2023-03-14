@@ -128,7 +128,8 @@ class HtbCli(CmdMenu):
   _cache = {}
   _cur_chal = None
   _cur_machine = None
-    
+  _target_dir = './HackTheBox/'
+
   def _id_from_name_or_current_chal(self, name):
     if name is not None:
       self._get_chal_list() # make sure chal list is there
@@ -240,7 +241,7 @@ class HtbCli(CmdMenu):
     if not info['docker']:
       print("There is no service to launch !")
       return 
-    if "." in info['docker_ip']:
+    if info['docker_ip'] is not None and "." in info['docker_ip']:
       print(f"Instance already UP ! {info['docker_ip']} {info['docker_port']}")
       return
     rsp = self.api.make_post(
@@ -261,7 +262,7 @@ class HtbCli(CmdMenu):
     return rsp.json()['challenge']
 
   @menuitem_option("challenge.flag", name=get_chal_names, difficulty=AVAILABLE_DIF)
-  def do_get_chal_info(self, name=None, id=None, flag=None, difficulty=None):
+  def do_chal_flag(self, name=None, id=None, flag=None, difficulty=None):
     if id is None:
       id = self._id_from_name_or_current_chal(name)
     if flag is None:
