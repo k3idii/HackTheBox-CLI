@@ -122,8 +122,6 @@ def _cacheable(key):
 
 
 
-
-
 class HtbCli(CmdMenu):
   _cache = {}
   _cur_chal = None
@@ -261,14 +259,15 @@ class HtbCli(CmdMenu):
     rsp = self.api.make_get(f"challenge/info/{id}")
     return rsp.json()['challenge']
 
+  @need_params("flag", "difficulty")
   @menuitem_option("challenge.flag", name=get_chal_names, difficulty=AVAILABLE_DIF)
   def do_chal_flag(self, name=None, id=None, flag=None, difficulty=None):
     if id is None:
       id = self._id_from_name_or_current_chal(name)
     if flag is None:
-      print(" >> GIB FLAG WTF !?")
+      raise Exception(" >> GIB FLAG WTF !?")
     if difficulty is None:
-      print(" >> Gib dificulty plz !")
+      raise Exception(" >> Gib dificulty plz !")
   
     rsp = self.api.make_post(
       f"challenge/own", 
@@ -283,6 +282,7 @@ class HtbCli(CmdMenu):
 
 
   @menuitem_option("challenge.workOn", name=get_chal_names)
+  @need_params("name")
   def work_on_chal(self, name=None):
     if name is None:
       return "Please provide NAME"
@@ -347,9 +347,8 @@ class HtbCli(CmdMenu):
     
     
   @menuitem_option("set.workdir", target=_complete_path)
+  @need_params("target")
   def set_the_workdir(self, target=None):
-    if target is None:
-      return "Please provide TARGET"
     if not os.path.isdir(target):
       return "TARGET is not a directory"
     self._target_dir = target
@@ -362,7 +361,7 @@ class HtbCli(CmdMenu):
 def _json_output_formatter(data):
   if data is not None:
     import json
-    print( json.dumps(data) )
+    print( json.dumps(data, indent=1) )
 
 def _yaml_output_formatter(data):
   if data is not None:

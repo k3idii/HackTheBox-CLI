@@ -32,6 +32,21 @@ def menuitem_option(_menu_item_name, **args):
   return set_metadata({ MENUITEM_ATTR : dict(name=_menu_item_name, args=args) })
 
 
+ORG_FUNCTION_HANDLE = "__org_func__"
+
+def need_params(*names):
+  def _wrap(org_func):
+    def _proxy_func(*a,**kw):
+      for name in names:
+        if name not in kw:
+          raise Exception(f"Please provide param : {name}=... ")
+      return org_func(*a,**kw)
+    setattr(_proxy_func, MENUARG_ATTR, getattr(org_func, MENUARG_ATTR, None))
+    setattr(_proxy_func, MENUITEM_ATTR, getattr(org_func, MENUITEM_ATTR, None))
+    setattr( _proxy_func, ORG_FUNCTION_HANDLE, org_func)
+    return _proxy_func
+  return _wrap
+
 
 def _list_item_or_none(collection, n):
   if collection is None:
@@ -85,6 +100,12 @@ class CmdMenu:
     self._create_menuentry_if_not_exists(name)
     self._menu[name]['handle'] = what
     
+    while True:
+      tmp = getattr(what, ORG_FUNCTION_HANDLE, None)
+      if tmp is None:
+        break
+      what = tmp
+
     sig = inspect.signature(what)
     for param_name, param in sig.parameters.items():
       #print(f"{param=}")
