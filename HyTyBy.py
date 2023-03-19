@@ -118,7 +118,11 @@ def _cacheable(key):
   return _wrap
 
 
-
+DEFAULT_SETTINGS = {
+  "workdir" : "./HackTheBox/",
+  "chall_dir" : "challs",
+  "machine_dir" : "boxes",
+}
 
 
 
@@ -126,7 +130,20 @@ class HtbCli(CmdMenu):
   _cache = {}
   _cur_chal = None
   _cur_machine = None
-  _target_dir = './HackTheBox/'
+  _chal_cat_names = []
+  _chal_cat_ids   = []
+  _chal_cat_name2id = {}
+  _box_names = []
+  _box_name2id = {}
+
+  settings = {}
+
+  def set_option(self, name, value):
+    self.settings[name] = value
+    json.dump(self.settings, open(".settings","w"))
+
+  def get_option(self, name):
+    self.settings.get(name, None)
 
   def _id_from_name_or_current_chal(self, name):
     if name is not None:
@@ -140,10 +157,28 @@ class HtbCli(CmdMenu):
     
   def setup(self, api):
     self.api = api
+    self.settings = DEFAULT_SETTINGS
+    try:
+      loaded = json.load(open(".settings","r"))
+      self.settings.update(loaded)
+    except:
+      print("Fail to load settings")
+
+
     
   def _complete_path(self, value:str):
     import glob
     return glob.glob(f"{value}*")
+
+
+
+ 
+
+
+
+
+
+
 
   @_cacheable("chal/cat/list")
   def _get_chal_category_list(self):
@@ -184,9 +219,15 @@ class HtbCli(CmdMenu):
     return int( name.split("::")[1] )
   
   
-  
-  
-  
+  @_cacheable('box/list')
+  def _get_box_list(self):
+    data = self.api.make_get('machine/list').json()['info']
+    self._box_names = []
+    self._box_name2id = {}
+    for item in data:
+      self._box_nams.append( item['name'] )
+      self._box_name2id[ item['name'] ] = item['id']
+    return data  
   
   
   
@@ -231,8 +272,13 @@ class HtbCli(CmdMenu):
       shutil.copyfileobj(rsp.raw, f)
     return dict(name=name, filepath=fpath, filename=fname)
   
+    
   @menuitem_option("challenge.start", name=get_chal_names)
   def do_chal_start(self, name=None):
+    def _show_chal_addr(host, port):
+      print(f" -> http://{host}:{port}/")
+      print(f" -> nc {host} {port}")
+      print(f" -> socat - TCP4:{host}:{port}")
     id = self._id_from_name_or_current_chal(name)
     
     info = self.do_get_chal_info(id=id)
@@ -241,6 +287,7 @@ class HtbCli(CmdMenu):
       return 
     if info['docker_ip'] is not None and "." in info['docker_ip']:
       print(f"Instance already UP ! {info['docker_ip']} {info['docker_port']}")
+      _show_chal_addr(info['docker_ip'], info['docker_port'][0])
       return
     rsp = self.api.make_post(
       f"challenge/start",
@@ -248,7 +295,9 @@ class HtbCli(CmdMenu):
         'challenge_id' : info['id']
       }
     )
-    return rsp.json()
+    data = rsp.json()
+    _show_chal_addr(data['ip'], data['port'])
+    return data
     
     
   @menuitem_option("challenge.info", name=get_chal_names)
@@ -264,11 +313,7 @@ class HtbCli(CmdMenu):
   def do_chal_flag(self, name=None, id=None, flag=None, difficulty=None):
     if id is None:
       id = self._id_from_name_or_current_chal(name)
-    if flag is None:
-      raise Exception(" >> GIB FLAG WTF !?")
-    if difficulty is None:
-      raise Exception(" >> Gib dificulty plz !")
-  
+
     rsp = self.api.make_post(
       f"challenge/own", 
       json = {
@@ -292,10 +337,16 @@ class HtbCli(CmdMenu):
     data = self.api.make_get(f"challenge/info/{id}").json()['challenge']
     print(f" 📎 {data['name']} / {data['category_name']} ")
     print(f" 📐 {data['difficulty']} / {data['points']} pts ")
-    print(f"    Solves : {data['solves']} ✅ ")
-    print(f"    Start  : {data['stars']}⭐ ")
+    print(f" ✅  Solves : {data['solves']}  ")
+    print(f" ⭐  Start  : {data['stars']} ")
   
-    wd = f"{self._target_dir}/{data['category_name'].lower()}/{data['name']}/"
+    #wd = f"{self._target_dir}/{self.get_option('chall_dir')}/{data['category_name'].lower()}/{data['name']}/"
+    wd = "{0}/{1}/{2}/{3}".format(
+      self.get_option('workdir'),
+      self.get_option('chall_dir'),
+      data['category_name'].lower(),
+      data['name']
+    )
     print(f"   📁 {wd}")
     os.makedirs(wd, exist_ok=True)
     os.makedirs(f"{wd}/code", exist_ok=True)
@@ -343,7 +394,52 @@ class HtbCli(CmdMenu):
     return self._cur_chal
   
 
-    
+  def _box__id_from_name_or_current(self, name):
+    self._get_box_list()
+    return int(self._box_name2id[name])
+
+
+
+  @_cacheable("chal/list_names")
+  def get_box_names(self):
+    self._get_box_list()
+    return self._box_names
+
+  @menuitem_option('boxes.list')
+  def list_boxes(self):
+    data = self._get_box_list()
+    result = _extract_fields_from_list(data, "id","name","os","points","difficulty")
+    return result
+
+  @menuitem_option("boxes.play", name=get_box_names)
+  def play_box(self, id=None, name=None):
+    if id is None:
+      id = self._box__id_from_name_or_current(name)
+    rsp = self.make_get("machine/play/{id}")
+    self._current_box_id = id
+    return rsp.json()
+
+  @need_params("flag", "difficulty")
+  @menuitem_option("boxes.own", name=get_box_names, difficulty=AVAILABLE_DIF))
+  def own_the_box(self, id="None", name="None", flag=None, difficulty=None):
+    if id is None:
+      id = self._box__id_from_name_or_current(name)
+    rsp = self.make_post(
+      "machine/own",
+      json = {"flag":flag,"id": id,"difficulty": difficulty}
+    )
+    return rsp.json()
+
+  @menuitem_option("boxes.reset", name=get_box_names)
+  def reset_box(self, id=None, name=None):
+    if id is None:
+      id = self._box__id_from_name_or_current(name)
+    rsp = self.make_post(
+      "/vm/reset"
+      json = {"machine_id": id }
+    )
+    return rsp.json()
+
     
     
   @menuitem_option("set.workdir", target=_complete_path)
@@ -351,11 +447,21 @@ class HtbCli(CmdMenu):
   def set_the_workdir(self, target=None):
     if not os.path.isdir(target):
       return "TARGET is not a directory"
-    self._target_dir = target
-    return ["OK", self._target_dir]
+    self.set_option('workdir',target)
+    return ["OK", target]
+  
+  @menuitem_option("settings")
+  def show_settings(self):
+    return self.settings
   
 
-  
+
+
+
+
+
+
+
   
 
 def _json_output_formatter(data):

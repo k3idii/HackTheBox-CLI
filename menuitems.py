@@ -217,12 +217,13 @@ class CmdMenu:
     except Exception as ex:
       print(f"Fail to execute. Reason : [ {ex} ] {_get_exception_info(ex)}")
     
-    
+  def get_prompt(self):
+    return self.prompt
 
   def _run(self, callback_func=None):
     self.KEEP_RUNNING = True
     while self.KEEP_RUNNING:
-      cmd = input(self.prompt)
+      cmd = input(self.get_prompt())
       self._execute(cmd, callback_func)
       
       
